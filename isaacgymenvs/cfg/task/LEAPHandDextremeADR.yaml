@@ -433,7 +433,7 @@ sim:
     use_gpu: ${contains:"cuda",${....sim_device}} # set to False to run on CPU
     num_position_iterations: 8
     num_velocity_iterations: 0
-    max_gpu_contact_pairs: 2147483648 # 8388608 # 8*1024*1024
+    max_gpu_contact_pairs: 8388608 # 8*1024*1024
     num_subscenes: ${....num_subscenes}
     contact_offset: 0.002
     rest_offset: 0.0
