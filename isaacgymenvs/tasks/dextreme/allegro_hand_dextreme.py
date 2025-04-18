@@ -871,9 +871,9 @@ class AllegroHandDextreme(ADRVecTask):
             rand_action_softmax = self.rna_network(torch.cat([self.dof_pos, self.object_pose_wrt_wrist], axis=-1))
             rand_action_inds    = torch.argmax(rand_action_softmax, axis=-1)
 
-            rand_action_inds  = torch.permute(rand_action_inds, (1, 0))
+            rand_action_inds  = rand_action_inds.permute((1, 0))
             rand_perturbation = torch.gather(self.discretised_dofs, 1, rand_action_inds)
-            rand_perturbation = torch.permute(rand_perturbation, (1, 0))
+            rand_perturbation = rand_perturbation.permute((1, 0))
 
             # unscale it first (normalise it to [-1, 1])
             rand_perturbation = unscale(rand_perturbation, 
@@ -1627,7 +1627,7 @@ def compute_hand_reward(
 
     # Find out which envs hit the goal and update successes count
     goal_reached = torch.where(torch.abs(rot_dist) <= success_tolerance, torch.ones_like(reset_goal_buf), reset_goal_buf)
-    hold_count_buf = torch.where(goal_reached, hold_count_buf + 1, torch.zeros_like(goal_reached))
+    hold_count_buf = torch.where(goal_reached == 1, hold_count_buf + 1, torch.zeros_like(goal_reached))
 
     goal_resets = torch.where(hold_count_buf > num_success_hold_steps, torch.ones_like(reset_goal_buf), reset_goal_buf)
     successes = successes + goal_resets
