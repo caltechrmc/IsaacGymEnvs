@@ -1174,18 +1174,12 @@ class LEAPHandDextreme(ADRVecTask):
         self.max_skip_obs = self.cfg["env"].get("maxObjectSkipObs", 1)
 
         self.object_type = self.cfg["env"]["objectType"]
-        assert self.object_type in ["block", "egg"]
+        assert self.object_type in ["small_cube", "large_cube"]
 
         self.asset_files_dict = {
-            "block": "urdf/objects/rgmc_cube_small.mjcf",
-
-            # "block": "urdf/objects/cube_multicolor_sdf.urdf",
-            "egg": "mjcf/open_ai_assets/hand/egg.xml",
+            "small_cube": "urdf/objects/rgmc_cube_small.mjcf",
+            "large_cube": "urdf/objects/rgmc_cube_large.mjcf",
         }
-
-        if "asset" in self.cfg["env"]:
-            self.asset_files_dict["block"] = self.cfg["env"]["asset"].get("assetFileNameBlock", self.asset_files_dict["block"])
-            self.asset_files_dict["egg"] = self.cfg["env"]["asset"].get("assetFileNameEgg", self.asset_files_dict["egg"])
 
         # Random Network Adversary 
         self.enable_rna = "random_network_adversary" in self.cfg["env"] and self.cfg["env"]["random_network_adversary"]["enable"]
