@@ -295,7 +295,9 @@ class LEAPHandDextreme(ADRVecTask):
         
         hand_start_pose = gymapi.Transform()
         hand_start_pose.p = gymapi.Vec3(*get_axis_params(0.5, self.up_axis_idx))
-        hand_start_pose.r = gymapi.Quat(0.0, 1.0, 0.0, 0.0)
+        #hand_start_pose.r = gymapi.Quat(0.0, 1.0, 0.0, 0.0)
+        hand_start_pose.r = gymapi.Quat.from_axis_angle(gymapi.Vec3(0, 1, 0), 0.1 * np.pi) * \
+                            gymapi.Quat.from_axis_angle(gymapi.Vec3(1, 0, 0), np.pi)
 
         object_start_pose = gymapi.Transform()
         object_start_pose.p = gymapi.Vec3()
