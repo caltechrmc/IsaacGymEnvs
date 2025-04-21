@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<robot name="small_cylinder">
+  <link name="cylinder_body">
+    <visual>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/small_cylinder.obj" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.08"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <!-- <origin xyz="0 0 -0.039842"/> -->
+      <mass value="10"/>
+      <density value="1240"/>
+      <!-- TODO: Add inertial matrix -->
+      <!-- <inertia ixx=" " ixy="0.0" ixz="0.0" iyy=" " iyz="0.0" izz=" "/> -->
+    </inertial>
+  </link>
+</robot>
