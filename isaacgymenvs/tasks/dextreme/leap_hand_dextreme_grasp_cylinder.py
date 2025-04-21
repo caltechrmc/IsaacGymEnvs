@@ -81,7 +81,7 @@ def euler_to_quaternion_batch(euler_angles):
     quaternions = torch.stack([qx, qy, qz, qw], dim=1)
     return quaternions
 
-class LEAPHandDextremeCylinderPositionControl(ADRVecTask):
+class LEAPHandDextremeGraspCylinder(ADRVecTask):
 
     dict_obs_cls = True
 
@@ -343,11 +343,10 @@ class LEAPHandDextremeCylinderPositionControl(ADRVecTask):
         goalObjectPoseDY = self.cfg["env"]["goalObjectPoseDY"]
         goalObjectPoseDZ = self.cfg["env"]["goalObjectPoseDZ"]
         
-        self.goal_displacement = gymapi.Vec3(goalObjectPoseDX, goalObjectPoseDY, goalObjectPoseDZ)
-        self.goal_displacement_tensor = to_torch([goalObjectPoseDX, goalObjectPoseDY, goalObjectPoseDZ], device=self.device)
+        goal_displacement = gymapi.Vec3(goalObjectPoseDX, goalObjectPoseDY, goalObjectPoseDZ)
         
         goal_start_pose = gymapi.Transform()
-        goal_start_pose.p = hand_start_pose.p + self.goal_displacement
+        goal_start_pose.p = hand_start_pose.p + goal_displacement
 
         # compute aggregate size
         max_agg_bodies = self.num_hand_bodies + 2
@@ -769,11 +768,7 @@ class LEAPHandDextremeCylinderPositionControl(ADRVecTask):
             new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], 
                                                 self.x_unit_tensor[env_ids], self.y_unit_tensor[env_ids])
 
-        self.random_cube_poses[:, 0:2] = self.object_init_state[env_ids, 0:2] +\
-            0.5 * rand_floats[:, 0:2]
-        
-        self.random_cube_poses[:, 2] = self.object_init_state[env_ids, 2] + \
-            0.5 * rand_floats[:, 2]
+        self.random_cube_poses[:, :3] = self.object_init_state[env_ids, :3] + 0.5 * rand_floats[:, :3]
 
         self.random_cube_poses[:, 3:7] = new_object_rot
 
@@ -785,7 +780,7 @@ class LEAPHandDextremeCylinderPositionControl(ADRVecTask):
 
     def reset_idx(self, env_ids, goal_env_ids):
         # generate random values
-        rand_floats = torch_rand_float(-1.0, 1.0, (len(env_ids), self.num_hand_dofs * 2 + 6), device=self.device)
+        rand_floats = torch_rand_float(-1.0, 1.0, (len(env_ids), 6 + self.num_hand_dofs * 2), device=self.device)
 
         # randomize start object poses
         self.reset_target_pose(env_ids)
@@ -830,9 +825,13 @@ class LEAPHandDextremeCylinderPositionControl(ADRVecTask):
         # reset object linear and angular velocities to zero
         self.root_state_tensor[active_object_indices, 7:13] = 0
         
+        # update the root state tensor in the simulation
+        object_indices = torch.cat([self.object_indices[env_ids], self.goal_object_indices[env_ids]]).to(torch.int32)
+        object_indices = torch.unique(object_indices)
+        
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                                      gymtorch.unwrap_tensor(self.root_state_tensor),
-                                                     gymtorch.unwrap_tensor(active_object_indices.to(torch.int32)), len(env_ids))
+                                                     gymtorch.unwrap_tensor(object_indices), len(object_indices))
 
         # reset random force probabilities
         self.random_force_prob[env_ids] = torch.exp((torch.log(self.force_prob_range[0]) - torch.log(self.force_prob_range[1]))
@@ -841,17 +840,16 @@ class LEAPHandDextremeCylinderPositionControl(ADRVecTask):
         # reset leap hand
         delta_max = self.hand_dof_upper_limits - self.hand_dof_default_pos
         delta_min = self.hand_dof_lower_limits - self.hand_dof_default_pos
-        rand_floats_dof_pos = (rand_floats[:, 5:5+self.num_hand_dofs] + 1) / 2
+        rand_floats_dof_pos = (rand_floats[:, 6:6 + self.num_hand_dofs] + 1) / 2
         rand_delta = delta_min + (delta_max - delta_min) * rand_floats_dof_pos
 
         pos = self.hand_default_dof_pos + self.reset_dof_pos_noise * rand_delta
         self.dof_pos[env_ids, :] = pos
         self.dof_vel[env_ids, :] = self.hand_dof_default_vel + \
-            self.reset_dof_vel_noise * rand_floats[:, 5+self.num_hand_dofs:5+self.num_hand_dofs*2]
+            self.reset_dof_vel_noise * rand_floats[:, 6 + self.num_hand_dofs:6 + self.num_hand_dofs * 2]
         
         self.prev_targets[env_ids, :self.num_hand_dofs] = pos
         self.cur_targets[env_ids, :self.num_hand_dofs] = pos
-        self.prev_prev_targets[env_ids, :self.num_hand_dofs] = pos
 
         hand_indices = self.hand_indices[env_ids].to(torch.int32)
         self.gym.set_dof_position_target_tensor_indexed(self.sim,
@@ -862,13 +860,9 @@ class LEAPHandDextremeCylinderPositionControl(ADRVecTask):
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(hand_indices), len(env_ids))
 
-
-
         # Need to update the pose of the cube so that it is represented wrt wrist 
         self.palm_link_pose = self.rigid_body_states[:, self.palm_link_handle, 0:7].view(-1, 7)
-
-        self.object_pose_wrt_wrist  = self.compute_poses_wrt_wrist(self.object_pose,
-                                                                    self.palm_link_pose)
+        self.object_pose_wrt_wrist  = self.compute_poses_wrt_wrist(self.object_pose, self.palm_link_pose)
 
         # object pose is represented with respect to the wrist 
         self.obs_object_pose[env_ids] = self.object_pose_wrt_wrist[env_ids].clone()
@@ -1079,7 +1073,7 @@ class LEAPHandDextremeCylinderPositionControl(ADRVecTask):
                 targety = (self.goal_pos[i] + quat_apply(self.goal_rot[i], to_torch([0, 1, 0], device=self.device) * 0.2)).cpu().numpy()
                 targetz = (self.goal_pos[i] + quat_apply(self.goal_rot[i], to_torch([0, 0, 1], device=self.device) * 0.2)).cpu().numpy()
 
-                p0 = self.goal_pos[i].cpu().numpy() + self.goal_displacement_tensor.cpu().numpy()
+                p0 = self.goal_pos[i].cpu().numpy()
                 self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], targetx[0], targetx[1], targetx[2]], [0.85, 0.1, 0.1])
                 self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], targety[0], targety[1], targety[2]], [0.1, 0.85, 0.1])
                 self.gym.add_lines(self.viewer, self.envs[i], 1, [p0[0], p0[1], p0[2], targetz[0], targetz[1], targetz[2]], [0.1, 0.1, 0.85])
@@ -1280,7 +1274,6 @@ class LEAPHandDextremeCylinderPositionControl(ADRVecTask):
 
         self.prev_targets = torch.zeros((self.num_envs, self.num_hand_dofs), dtype=torch.float, device=self.device)
         self.cur_targets = torch.zeros((self.num_envs, self.num_hand_dofs), dtype=torch.float, device=self.device)
-        self.prev_prev_targets = torch.zeros((self.num_envs, self.num_hand_dofs), dtype=torch.float, device=self.device)
 
         self.global_indices = torch.arange(self.num_envs * 3, dtype=torch.int32, device=self.device).view(self.num_envs, -1)
         self.x_unit_tensor = to_torch([1, 0, 0], dtype=torch.float, device=self.device).repeat((self.num_envs, 1))
@@ -1346,10 +1339,6 @@ class LEAPHandDextremeCylinderPositionControl(ADRVecTask):
         self.curr_rotation_dist = None
         self.best_rotation_dist = -torch.ones(self.num_envs, dtype=torch.float, device=self.device)
 
-        self.unique_cube_rotations = torch.tensor(unique_cube_rotations_3d(), dtype=torch.float, device=self.device)
-        self.unique_cube_rotations = matrix_to_quaternion(self.unique_cube_rotations)
-        self.num_unique_cube_rotations = self.unique_cube_rotations.shape[0]
-
     def randomisation_callback(self, param_name, param_val, env_id=None, actor=None):
         if param_name == "gravity":
             self.gravity_vec[:, 0] = param_val.x
@@ -1366,7 +1355,7 @@ class LEAPHandDextremeCylinderPositionControl(ADRVecTask):
 
 
 
-class LEAPHandDextremeCylinderPositionControlADR(LEAPHandDextremeCylinderPositionControl):
+class LEAPHandDextremeGraspCylinderADR(LEAPHandDextremeGraspCylinder):
 
     def _init_pre_sim_buffers(self):
         super()._init_pre_sim_buffers()
@@ -1519,7 +1508,7 @@ class LEAPHandDextremeCylinderPositionControlADR(LEAPHandDextremeCylinderPositio
         return
 
 
-class LEAPHandDextremeCylinderPositionControlManualDR(LEAPHandDextremeCylinderPositionControl):
+class LEAPHandDextremeGraspCylinderManualDR(LEAPHandDextremeGraspCylinder):
 
     def _init_post_sim_buffers(self):
         super()._init_post_sim_buffers()

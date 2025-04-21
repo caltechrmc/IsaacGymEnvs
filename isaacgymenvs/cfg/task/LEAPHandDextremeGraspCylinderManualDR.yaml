@@ -1,5 +1,5 @@
 # used to create the object
-name: LEAPHandCylinderPositionControlManualDR
+name: LEAPHandGraspCylinderManualDR
 
 physics_engine: ${..physics_engine}
 
@@ -47,23 +47,29 @@ env:
   actionLatencyMax: 15
   actionLatencyScheduledSteps: 10_000_000
 
+  # Additive position reset noise
+  resetXPositionNoise: 0.02  # ± m
+  resetYPositionNoise: 0.02  # ± m
+  resetZPositionNoise: 0.005 # ± m
 
-  startPositionNoise: 0.01
-  startRotationNoise: 0.0
-
-  resetPositionNoise: 0.03
-  resetPositionNoiseZ: 0.01
-  resetRotationNoise: 0.0
-  resetDofPosRandomInterval: 0.5
+  # Additive rotation reset noise
+  resetXRotationNoise: 0.3 # ± rad
+  resetYRotationNoise: 0.3 # ± rad
+  resetZRotationNoise: 0.0 # ± rad (no reason to make this non-zero since the cylinder is symmetrical about the z-axis)
+  
+  # DOFs reset noise
+  resetDofPosRandomInterval: 0.2
   resetDofVelRandomInterval: 0.0
 
-  startObjectPoseDX: -0.02
-  startObjectPoseDY: 0.035
-  startObjectPoseDZ: 0.07
+  # Initial object offsets
+  startObjectPoseDX: -0.02  # m
+  startObjectPoseDY:  0.035 # m
+  startObjectPoseDZ:  0.07  # m
 
-  goalObjectPoseDX: -0.02
-  goalObjectPoseDY: 0.035
-  goalObjectPoseDZ: 0.135
+  # Goal offsets
+  goalObjectPoseDX: -0.03  # m
+  goalObjectPoseDY:  0.035 # m
+  goalObjectPoseDZ:  0.135 # m
 
   # Random forces applied to the object
   forceScale: 2.0
@@ -95,9 +101,10 @@ env:
   objectType: "small_cylinder" # can be small_cylinder, medium_cylinder, or large_cylinder
   observationType: "no_vel" #"full_state" # can be "no_vel", "full_state"
   asymmetric_observations: True
-  successTolerance: 0.4
+  successPosTolerance: 0.001
+  successRotTolerance: 0.01
   printNumSuccesses: False
-  maxConsecutiveSuccesses: 50
+  maxConsecutiveSuccesses: 0
 
   asset:
     assetFileName: "urdf/leap_description/leap_hand_right.urdf"
