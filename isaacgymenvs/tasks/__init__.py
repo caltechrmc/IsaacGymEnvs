@@ -47,6 +47,7 @@ from .allegro_hand import AllegroHand
 from .dextreme.allegro_hand_dextreme import AllegroHandDextremeManualDR, AllegroHandDextremeADR
 from .dextreme.leap_hand_dextreme import LEAPHandDextremeManualDR, LEAPHandDextremeADR
 from .dextreme.leap_hand_dextreme_grasp_cylinder import LEAPHandDextremeGraspCylinderManualDR, LEAPHandDextremeGraspCylinderADR
+from .dextreme.leap_hand_dextreme_reorient_cube import LEAPHandDextremeReorientCubeManualDR, LEAPHandDextremeReorientCubeADR
 from .leap_hand import LEAPHand
 from .trifinger import Trifinger
 
@@ -99,6 +100,8 @@ isaacgym_task_map = {
     "LEAPHandADR": LEAPHandDextremeADR,
     "LEAPHandGraspCylinderADR": LEAPHandDextremeGraspCylinderADR,
     "LEAPHandGraspCylinderManualDR": LEAPHandDextremeGraspCylinderManualDR,
+    "LEAPHandReorientCubeADR": LEAPHandDextremeReorientCubeADR,
+    "LEAPHandReorientCubeManualDR": LEAPHandDextremeReorientCubeManualDR,
     "Ant": Ant,
     "Anymal": Anymal,
     "AnymalTerrain": AnymalTerrain,

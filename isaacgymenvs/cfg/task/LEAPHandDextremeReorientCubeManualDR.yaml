@@ -1,5 +1,5 @@
 # used to create the object
-name: LEAPHandGraspCylinderManualDR
+name: LEAPHandReorientCubeManualDR
 
 physics_engine: ${..physics_engine}
 
@@ -55,7 +55,7 @@ env:
   # Additive rotation reset noise
   resetXRotationNoise: 0.3 # ± rad
   resetYRotationNoise: 0.3 # ± rad
-  resetZRotationNoise: 0.0 # ± rad
+  resetZRotationNoise: 0.0 # ± rad (no reason to make this non-zero since the cylinder is symmetrical about the z-axis)
   
   # DOFs reset noise
   resetDofPosRandomInterval: 0.2

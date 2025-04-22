@@ -1,5 +1,5 @@
 # used to create the object
-name: LEAPHandGraspCylinderADR
+name: LEAPHandReorientCubeADR
 
 physics_engine: ${..physics_engine}
 
@@ -46,13 +46,13 @@ env:
   actionLatencyScheduledSteps: 2_000_000
 
   # Additive position reset noise
-  resetXPositionNoise: 0.02  # ± m
-  resetYPositionNoise: 0.02  # ± m
-  resetZPositionNoise: 0.005 # ± m
+  resetXPositionNoise: 0.01 # ± m
+  resetYPositionNoise: 0.01 # ± m
+  resetZPositionNoise: 0.00 # ± m
 
   # Additive rotation reset noise
-  resetXRotationNoise: 0.3           # ± rad
-  resetYRotationNoise: 0.3           # ± rad
+  resetXRotationNoise: 0.0 # ± rad
+  resetYRotationNoise: 0.0 # ± rad
   resetZRotationNoise: 3.14159265359 # ± rad
   
   # DOFs reset noise
@@ -60,14 +60,14 @@ env:
   resetDofVelRandomInterval: 0.0
 
   # Initial object offsets
-  startObjectPoseDX: -0.02  # m
-  startObjectPoseDY:  0.035 # m
-  startObjectPoseDZ:  0.075 # m
+  startObjectPoseDX: -0.065 # m
+  startObjectPoseDY:  0.055 # m
+  startObjectPoseDZ:  0.064 # m
 
   # Goal offsets
-  goalObjectPoseDX: -0.03  # m
-  goalObjectPoseDY:  0.035 # m
-  goalObjectPoseDZ:  0.135 # m
+  goalObjectPoseDX: 0.0 # m
+  goalObjectPoseDY: 0.0 # m
+  goalObjectPoseDZ: 0.0 # m
 
   # Random forces applied to the object
   forceScale: 2.0
@@ -86,22 +86,22 @@ env:
     prob: 0.3
 
   # reward -> dictionary
-  distRewardScale: -0.04
+  distRewardScale: -10.0
   rotRewardScale: 1.0
-  rotEps: 9.6
+  rotEps: 0.1
   actionPenaltyScale: -0.001
   actionDeltaPenaltyScale: -0.2 #-0.01
   reachGoalBonus: 250
   fallDistance: 0.24
-  fallPenalty: -250 # 0.0
+  fallPenalty: 0.0
 
-  objectType: "small_cylinder" # can be small_cylinder, medium_cylinder, or large_cylinder
+  objectType: "small_cube" # can be small_cube or large_cube
   observationType: "no_vel" #"full_state" # can be "no_vel", "full_state"
   asymmetric_observations: True
-  successPosTolerance: 0.003 # m
-  successRotTolerance: 0.1   # rad
+  successPosTolerance: 0.003 # m (unused)
+  successRotTolerance: 0.5   # rad
   printNumSuccesses: False
-  maxConsecutiveSuccesses: 0
+  maxConsecutiveSuccesses: 50
 
   asset:
     assetFileName: "urdf/leap_description/leap_hand_right.urdf"
