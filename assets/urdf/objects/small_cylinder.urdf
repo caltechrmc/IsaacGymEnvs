@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<robot name="small_cylinder">
+  <link name="cylinder_body">
+    <visual>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="meshes/small_cylinder.obj" scale="1 1 1"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.03" length="0.08"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.224385"/>
+      <density value="992.0"/>
+      <inertia ixx="0.000170158625" ixy="0.0" ixz="0.0" iyy="0.000170158625" iyz="0.0" izz="0.00010097325"/>
+    </inertial>
+  </link>
+</robot>
