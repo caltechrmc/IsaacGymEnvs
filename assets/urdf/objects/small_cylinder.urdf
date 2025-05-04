@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<robot name="small_cylinder">
-  <link name="cylinder_body">
+<robot name="object">
+  <link name="object">
     <visual>
       <origin xyz="0 0 0"/>
       <geometry>

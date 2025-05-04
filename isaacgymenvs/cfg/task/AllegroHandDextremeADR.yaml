@@ -87,7 +87,7 @@ env:
   observationType: "no_vel" #"full_state" # can be "no_vel", "full_state"
   asymmetric_observations: True
   successTolerance: 0.1
-  printNumSuccesses: False
+  printNumSuccesses: True
   maxConsecutiveSuccesses: 50
 
   asset:

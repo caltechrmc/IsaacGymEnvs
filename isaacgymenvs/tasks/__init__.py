@@ -92,6 +92,7 @@ isaacgym_task_map = {
     "AllegroKukaTwoArms": resolve_allegro_kuka_two_arms,
     "AllegroHandManualDR": AllegroHandDextremeManualDR,
     "AllegroHandADR": AllegroHandDextremeADR,
+    "AllegroHandNoDR": AllegroHandDextremeManualDR,
     "LEAPHandADR": LEAPHandDextremeADR,
     "Ant": Ant,
     "Anymal": Anymal,

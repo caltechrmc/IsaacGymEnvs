@@ -70,7 +70,6 @@ def get_default_setter_args(gym):
 
 def generate_random_samples(attr_randomization_params, shape, curr_gym_step_count,
                             extern_sample=None):
-
     rand_range = attr_randomization_params['range']
     distribution = attr_randomization_params['distribution']
 

@@ -22,14 +22,15 @@ params:
         fixed_sigma: True
 
     inputs:
-      dof_pos_randomized: {}
+
+      dof_pos_randomized: { }
       object_pose_cam_randomized: { }
-      goal_pose: { }
+      goal_pose_randomized: { }
       goal_relative_rot_cam_randomized: { }
-      last_actions: { }
+      last_actions_randomized: { }
 
     mlp:
-      units: [512, 512]
+      units: [256]
       activation: elu
       d2rl: False
 
@@ -39,7 +40,7 @@ params:
         name: None
     rnn:
         name: lstm
-        units: 1024
+        units: 512
         layers: 1
         before_mlp: True
         layer_norm: True
@@ -48,7 +49,7 @@ params:
   load_path: ${...checkpoint} # path to the checkpoint to load
 
   config:
-    name: ${resolve_default:LEAPHandADRAsymmLSTM,${....experiment}}
+    name: ${resolve_default:AllegroHandNoDRAsymmLSTM,${....experiment}}
     full_experiment_name: ${.name}
     env_name: rlgpu
     multi_gpu: ${....multi_gpu}
@@ -64,35 +65,31 @@ params:
     gamma: 0.998
     tau: 0.95
     learning_rate: 1e-4
-    lr_schedule: linear #adaptive
+    lr_schedule: adaptive
     schedule_type: standard
-    kl_threshold: 0.01
-    score_to_win: 1000000
-    max_epochs: ${resolve_default:1000_000,${....max_iterations}}
-    save_best_after: 10000
-    save_frequency: 50 # 500
+    kl_threshold: 0.016
+    score_to_win: 100000
+    max_epochs: ${resolve_default:50000,${....max_iterations}}
+    save_best_after: 200
+    save_frequency: 500
     print_stats: True
     grad_norm: 1.0
-    entropy_coef: 0.002
+    entropy_coef: 0.0
     truncate_grads: True
     e_clip: 0.2
-    horizon_length: 32
-    minibatch_size: 32768 # 16384
+    horizon_length: 16
+    minibatch_size: 16384
     mini_epochs: 4
     critic_coef: 4
     clip_value: True
-    seq_length: 32 # 16
-    bound_loss_type: regularization
-    bounds_loss_coef: 0.005
+    seq_length: 16
+    bounds_loss_coef: 0.0001
     zero_rnn_on_done: False
 
-    # optimize summaries to prevent tf.event files from growing to gigabytes
-    force_interval_writer: True
-
     central_value_config:
-      minibatch_size: 32768 # 16384
+      minibatch_size: 16384 
       mini_epochs: 4
-      learning_rate: 5e-5
+      learning_rate: 1e-4
       kl_threshold: 0.016
       clip_value: True
       normalize_input: True
@@ -116,31 +113,19 @@ params:
 
           last_actions: { }
 
-          stochastic_delay_params: { }
-          affine_params: { }
-
-          cube_random_params: {}
-          hand_random_params: {}
           ft_force_torques: {}
           gravity_vec: {}
           ft_states: {}
-          rot_dist: {}
-          rb_forces: {}
+
 
         mlp:
-          units: [1024, 512] 
+          units: [512, 256, 128] 
           activation: elu
           d2rl: False
           initializer:
             name: default
           regularizer:
             name: None
-        rnn:
-          name: lstm
-          units: 2048 
-          layers: 1
-          before_mlp: True
-          layer_norm: True
 
     player:
       deterministic: True

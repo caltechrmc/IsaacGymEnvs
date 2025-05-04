@@ -42,7 +42,7 @@ from isaacgym import gymapi
 from isaacgym import gymtorch
 
 from isaacgymenvs.utils.torch_jit_utils import scale, unscale, quat_mul, quat_conjugate, quat_from_angle_axis, \
-    to_torch, get_axis_params, torch_rand_float, tensor_clamp  
+    to_torch, get_axis_params, torch_rand_float, tensor_clamp, quat_apply
 
 from torch import Tensor
 
@@ -87,6 +87,8 @@ class LEAPHandDextreme(ADRVecTask):
         self.num_obs_dict = self.get_num_obs_dict(num_dofs)
 
         self.cfg["env"]["obsDims"] = {} 
+        
+        self.use_goal_facets = cfg["env"]["useGoalFacets"]
 
         for o in self.num_obs_dict.keys():
             if o not in self.num_obs_dict:
@@ -152,15 +154,21 @@ class LEAPHandDextreme(ADRVecTask):
         # self.actions are in [-1, 1] as they are raw 
         # actions returned by the policy 
 
-        return {
+        out = {
             # 'observations': self.obs_buf,
             'actions': actions,
             'cube_state': self.root_state_tensor[self.object_indices],
-            'goal_state': self.goal_states,
             'joint_positions': self.dof_pos,
             'joint_velocities': self.dof_vel,
             'root_state': self.root_state_tensor[self.hand_indices],
         }
+        
+        if self.use_goal_facets:
+            out['goal_facets'] = self.goal_facets
+        else:
+            out['goal_state'] = self.goal_states
+            
+        return out
 
     def save_step(self):
         self.capture.append_experience(self.get_save_tensors())
@@ -218,11 +226,11 @@ class LEAPHandDextreme(ADRVecTask):
         upper = gymapi.Vec3(spacing, spacing, spacing)
 
         asset_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../assets')
-        hand_asset_file = "urdf/leap_hand/leap_hand_right.urdf"
+        hand_asset_file = "urdf/leap_hand/leap_hand_%s.urdf" % self.cfg["env"]["hand"]
 
-        if "asset" in self.cfg["env"]:
-            asset_root = self.cfg["env"]["asset"].get("assetRoot", asset_root)
-            hand_asset_file = self.cfg["env"]["asset"].get("assetFileName", hand_asset_file)
+        #if "asset" in self.cfg["env"]:
+        #    asset_root = self.cfg["env"]["asset"].get("assetRoot", asset_root)
+        #    hand_asset_file = self.cfg["env"]["asset"].get("assetFileName", hand_asset_file)
 
         object_asset_file = self.asset_files_dict[self.object_type]
 
@@ -238,7 +246,7 @@ class LEAPHandDextreme(ADRVecTask):
         # Convex decomposition
         if self.cfg["env"]["use_vhacd"]:
             asset_options.vhacd_enabled = True
-            #asset_options.vhacd_params.resolution = 300000
+            # asset_options.vhacd_params.resolution = 100000
 
         if self.physics_engine == gymapi.SIM_PHYSX:
             asset_options.use_physx_armature = True
@@ -321,8 +329,8 @@ class LEAPHandDextreme(ADRVecTask):
         goal_start_pose = gymapi.Transform()
         goal_start_pose.p = object_start_pose.p + self.goal_displacement
 
-        goal_start_pose.p.y -= 0.02
-        goal_start_pose.p.z -= 0.04
+        #goal_start_pose.p.y -= 0.02
+        goal_start_pose.p.z -= 0.01
 
         # compute aggregate size
         max_agg_bodies = self.num_hand_bodies + 2
@@ -345,6 +353,18 @@ class LEAPHandDextreme(ADRVecTask):
         hand_rb_count = self.gym.get_asset_rigid_body_count(hand_asset)
         object_rb_count = self.gym.get_asset_rigid_body_count(object_asset)
         self.object_rb_handles = list(range(hand_rb_count, hand_rb_count + object_rb_count))
+        
+        self.goal_facets = torch.zeros((self.num_envs,), dtype=torch.long, device=self.device)
+        
+        rand_facets = torch.randint(0, 6, (self.num_envs,), dtype=torch.long, device=self.device)
+            
+        while True:
+            matching_indices = torch.where(rand_facets == self.goal_facets)[0]
+            if len(matching_indices) == 0:
+                break
+            rand_facets[matching_indices] = torch.randint(0, 6, (len(matching_indices),), dtype=torch.long, device=self.device)
+            
+        self.goal_facets = rand_facets
 
         for i in range(self.num_envs):
             # create env instance
@@ -395,15 +415,15 @@ class LEAPHandDextreme(ADRVecTask):
 
 
 
-        self.palm_link_handle =  self.gym.find_actor_rigid_body_handle(env_ptr, hand_actor, "palm_link"),
-
+        self.palm_link_handle =  self.gym.find_actor_rigid_body_handle(env_ptr, hand_actor, "palm_lower_" + self.cfg["env"]["hand"]),
+        print("palm:", self.palm_link_handle)
 
         object_rb_props = self.gym.get_actor_rigid_body_properties(env_ptr, object_handle)
         self.object_rb_masses = [prop.mass for prop in object_rb_props]
 
         self.object_init_state = to_torch(self.object_init_state, device=self.device, dtype=torch.float).view(self.num_envs, 13)
         self.goal_states = self.object_init_state.clone()
-        self.goal_states[:, self.up_axis_idx] -= 0.04
+        self.goal_states[:, self.up_axis_idx] -= 0.01
         self.goal_init_state = self.goal_states.clone()
         self.hand_start_states = to_torch(self.hand_start_states, device=self.device).view(self.num_envs, 13)
 
@@ -444,13 +464,12 @@ class LEAPHandDextreme(ADRVecTask):
         self.random_cube_poses = torch.zeros(self.num_envs, 7, device=self.device)
 
     def compute_reward(self, actions):
-
         self.rew_buf[:], self.reset_buf[:], self.reset_goal_buf[:], self.progress_buf[:], \
         self.hold_count_buf[:], self.successes[:], self.consecutive_successes[:], \
         dist_rew, rot_rew, action_penalty, action_delta_penalty, velocity_penalty, reach_goal_rew, fall_rew, timeout_rew = compute_hand_reward(
             self.rew_buf, self.reset_buf, self.reset_goal_buf, self.progress_buf, self.hold_count_buf, self.cur_targets, self.prev_targets,
             self.dof_vel, self.successes, self.consecutive_successes, self.max_episode_length,
-            self.object_pos, self.object_rot, self.goal_pos, self.goal_rot, self.dist_reward_scale, self.rot_reward_scale, self.rot_eps,
+            self.object_pos, self.object_rot, self.goal_pos, self.goal_rot, self.goal_facets, self.use_goal_facets, self.facet_normals, self.z_unit_tensor, self.dist_reward_scale, self.rot_reward_scale, self.rot_eps,
             self.actions, self.action_penalty_scale, self.action_delta_penalty_scale,
             self.success_tolerance, self.reach_goal_bonus, self.fall_dist, self.fall_penalty,
             self.max_consecutive_successes, self.av_factor, self.num_success_hold_steps
@@ -691,8 +710,18 @@ class LEAPHandDextreme(ADRVecTask):
             self.obs_dict["hand_random_params"][:] = self.hand_random_params
             self.obs_dict["gravity_vec"][:] = self.gravity_vec
         
-        quat_diff = quat_mul(self.object_rot, quat_conjugate(self.goal_rot))
-        self.curr_rotation_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_diff[:, 0:3], p=2, dim=-1), max=1.0))
+        if self.use_goal_facets:
+            a = quat_apply(self.object_rot, self.facet_normals[self.goal_facets])
+            b = self.z_unit_tensor
+            anormed = a / torch.linalg.norm(a, dim=-1, keepdim=True)
+            bnormed = b / torch.linalg.norm(b, dim=-1, keepdim=True)
+            self.curr_rotation_dist = torch.atan2(torch.linalg.norm(torch.cross(anormed, bnormed, dim=-1), dim=-1), (anormed * bnormed).sum(dim=-1))
+            
+            assert torch.all(self.curr_rotation_dist >= 0.0) and torch.all(self.curr_rotation_dist <= torch.pi)
+        else:
+            quat_diff = quat_mul(self.object_rot, quat_conjugate(self.goal_rot))
+            self.curr_rotation_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_diff[:, 0:3], p=2, dim=-1), max=1.0))
+        
         self.best_rotation_dist = torch.where(self.best_rotation_dist < 0.0, self.curr_rotation_dist, self.best_rotation_dist)
 
         # add rotation distances to the observations so that critic could predict the rewards better
@@ -715,15 +744,27 @@ class LEAPHandDextreme(ADRVecTask):
         return new_rot
 
     def reset_target_pose(self, env_ids, apply_reset=False):
-        rand_floats = torch_rand_float(-1.0, 1.0, (len(env_ids), 4), device=self.device)
-
-        if self.apply_random_quat:
-
+        if self.use_goal_facets:
+            rand_facets = torch.randint(0, 6, (len(env_ids),), dtype=torch.long, device=self.device)
+            
+            while True:
+                matching_indices = torch.where(rand_facets == self.goal_facets[env_ids])[0]
+                if len(matching_indices) == 0:
+                    break
+                rand_facets[matching_indices] = torch.randint(0, 6, (len(matching_indices),), dtype=torch.long, device=self.device)
+                
+            self.goal_facets[env_ids] = rand_facets
+            
+            random_z_rotation_angles = torch_rand_float(0, 2 * np.pi, (len(env_ids), 1), device=self.device)
+            goal_quaternions = self.facet_orientations[rand_facets]
+            random_z_rotations = quat_from_angle_axis(random_z_rotation_angles[:, 0], self.z_unit_tensor[env_ids])
+            new_rot = quat_mul(random_z_rotations, goal_quaternions)
+        elif self.apply_random_quat:
             new_rot = self.get_random_quat(env_ids)
-
         else:
+            rand_floats = torch_rand_float(-1.0, 1.0, (len(env_ids), 4), device=self.device)
             new_rot = randomize_rotation(rand_floats[:, 0], rand_floats[:, 1], self.x_unit_tensor[env_ids], self.y_unit_tensor[env_ids])
-
+        
         self.goal_states[env_ids, 0:3] = self.goal_init_state[env_ids, 0:3]
         self.goal_states[env_ids, 3:7] = new_rot
         self.root_state_tensor[self.goal_object_indices[env_ids], 0:3] = self.goal_states[env_ids, 0:3] + self.goal_displacement_tensor
@@ -785,12 +826,12 @@ class LEAPHandDextreme(ADRVecTask):
         # generate random values
         rand_floats = torch_rand_float(-1.0, 1.0, (len(env_ids), self.num_hand_dofs * 2 + 5), device=self.device)
 
-        # randomize start object poses
-        self.reset_target_pose(env_ids)
-
         # reset rigid body forces
         self.rb_forces[env_ids, :, :] = 0.0
 
+        # randomize start object poses
+        self.reset_target_pose(env_ids)
+        
         # reset object
         self.root_state_tensor[self.object_indices[env_ids]] = self.object_init_state[env_ids].clone()
         self.root_state_tensor[self.object_indices[env_ids], 0:2] = self.object_init_state[env_ids, 0:2] + \
@@ -798,7 +839,10 @@ class LEAPHandDextreme(ADRVecTask):
         self.root_state_tensor[self.object_indices[env_ids], self.up_axis_idx] = self.object_init_state[env_ids, self.up_axis_idx] + \
             self.reset_position_noise_z * rand_floats[:, self.up_axis_idx]
 
-        if self.apply_random_quat:
+        if self.use_goal_facets:
+            # TODO: Do we want to randomize this?
+            new_object_rot = torch.tensor([[0.0, 0.0, 0.0, 1.0]], device=self.device).repeat(len(env_ids), 1)
+        elif self.apply_random_quat:
             new_object_rot = self.get_random_quat(env_ids)
         else:
             new_object_rot = randomize_rotation(rand_floats[:, 3], rand_floats[:, 4], self.x_unit_tensor[env_ids], self.y_unit_tensor[env_ids])
@@ -812,7 +856,7 @@ class LEAPHandDextreme(ADRVecTask):
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
                                                      gymtorch.unwrap_tensor(self.root_state_tensor),
                                                      gymtorch.unwrap_tensor(object_indices), len(object_indices))
-
+        
         # reset random force probabilities
         self.random_force_prob[env_ids] = torch.exp((torch.log(self.force_prob_range[0]) - torch.log(self.force_prob_range[1]))
                                                     * torch.rand(len(env_ids), device=self.device) + torch.log(self.force_prob_range[1]))
@@ -1331,6 +1375,58 @@ class LEAPHandDextreme(ADRVecTask):
         self.unique_cube_rotations = torch.tensor(unique_cube_rotations_3d(), dtype=torch.float, device=self.device)
         self.unique_cube_rotations = matrix_to_quaternion(self.unique_cube_rotations)
         self.num_unique_cube_rotations = self.unique_cube_rotations.shape[0]
+        
+        self.facet_normals = torch.tensor([
+            [0, 0, 1],
+            [1, 0, 0],
+            [0, 1, 0],
+            [-1, 0, 0],
+            [0, 0, -1],
+            [0, -1, 0],
+        ], dtype=torch.float, device=self.device)
+        
+        s = np.sqrt(2) / 2
+        self.facet_orientations = torch.tensor([
+            [0, 0, s, -s],
+            [0, s, 0, -s],
+            [0.5, 0.5, 0.5, 0.5],
+            [0.5, -0.5, -0.5, -0.5],
+            [1, 0, 0, 0],
+            [0, s, -s, 0],
+        ], dtype=torch.float, device=self.device)
+        
+        # A: 0, 0, 0.7071, -0.7071
+        # B: 0, 0.7071, 0, -0.7071
+        # C: 0.5, 0.5, 0.5, 0.5
+        # D: 0.5, -0.5, -0.5, -0.5
+        # E: 1, 0, 0, 0
+        # F: 0, 0.7071, -0.7071, 0
+        """
+        A tensor([0., 0., 0., 1.], device='cuda:0')
+        X tensor([0., 0., 1., 0.], device='cuda:0')
+        F tensor([0., 1., 0., 0.], device='cuda:0')
+        X tensor([1., 0., 0., 0.], device='cuda:0')
+        A tensor([ 0.0000,  0.0000,  0.7071, -0.7071], device='cuda:0')
+        tensor([0.0000, 0.0000, 0.7071, 0.7071], device='cuda:0')
+        tensor([0.7071, 0.7071, 0.0000, 0.0000], device='cuda:0')
+        tensor([ 0.7071, -0.7071,  0.0000,  0.0000], device='cuda:0')
+        tensor([ 0.0000,  0.7071, -0.7071,  0.0000], device='cuda:0')
+        tensor([0.7071, 0.0000, 0.0000, 0.7071], device='cuda:0')
+        tensor([ 0.7071,  0.0000,  0.0000, -0.7071], device='cuda:0')
+        tensor([0.0000, 0.7071, 0.7071, 0.0000], device='cuda:0')
+        tensor([ 0.5000,  0.5000, -0.5000,  0.5000], device='cuda:0')
+        tensor([ 0.5000, -0.5000,  0.5000,  0.5000], device='cuda:0')
+        tensor([ 0.5000,  0.5000,  0.5000, -0.5000], device='cuda:0')
+        tensor([ 0.5000, -0.5000, -0.5000, -0.5000], device='cuda:0')
+        tensor([ 0.5000,  0.5000, -0.5000, -0.5000], device='cuda:0')
+        tensor([ 0.5000, -0.5000, -0.5000,  0.5000], device='cuda:0')
+        tensor([ 0.5000, -0.5000,  0.5000, -0.5000], device='cuda:0')
+        tensor([0.5000, 0.5000, 0.5000, 0.5000], device='cuda:0')
+        tensor([ 0.0000,  0.7071,  0.0000, -0.7071], device='cuda:0')
+        tensor([ 0.7071,  0.0000, -0.7071,  0.0000], device='cuda:0')
+        tensor([0.0000, 0.7071, 0.0000, 0.7071], device='cuda:0')
+        tensor([0.7071, 0.0000, 0.7071, 0.0000], device='cuda:0')
+        """
 
     def randomisation_callback(self, param_name, param_val, env_id=None, actor=None):
         if param_name == "gravity":
@@ -1602,7 +1698,7 @@ class LEAPHandDextremeManualDR(LEAPHandDextreme):
 @torch.jit.script
 def compute_hand_reward(
     rew_buf, reset_buf, reset_goal_buf, progress_buf, hold_count_buf, cur_targets, prev_targets, hand_dof_vel, successes, consecutive_successes,
-    max_episode_length: float, object_pos, object_rot, target_pos, target_rot,
+    max_episode_length: float, object_pos, object_rot, target_pos, target_rot, target_facets, use_target_facets: bool, facet_normals, z_unit_tensor,
     dist_reward_scale: float, rot_reward_scale: float, rot_eps: float,
     actions, action_penalty_scale: float, action_delta_penalty_scale: float, #max_velocity: float,
     success_tolerance: float, reach_goal_bonus: float, fall_dist: float,
@@ -1612,8 +1708,16 @@ def compute_hand_reward(
     goal_dist = torch.norm(object_pos - target_pos, p=2, dim=-1)
 
     # Orientation alignment for the cube in hand and goal cube
-    quat_diff = quat_mul(object_rot, quat_conjugate(target_rot))
-    rot_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_diff[:, 0:3], p=2, dim=-1), max=1.0))
+    if use_target_facets:
+        a = quat_apply(object_rot, facet_normals[target_facets])
+        b = z_unit_tensor
+        anormed = a / torch.linalg.norm(a, dim=-1, keepdim=True)
+        bnormed = b / torch.linalg.norm(b, dim=-1, keepdim=True)
+        rot_dist = torch.atan2(torch.linalg.norm(torch.cross(anormed, bnormed, dim=-1), dim=-1), (anormed * bnormed).sum(dim=-1))
+        assert torch.all(rot_dist >= 0.0) and torch.all(rot_dist <= torch.pi)
+    else:
+        quat_diff = quat_mul(object_rot, quat_conjugate(target_rot))
+        rot_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_diff[:, 0:3], p=2, dim=-1), max=1.0))
 
     dist_rew = goal_dist * dist_reward_scale
     rot_rew = 1.0/(torch.abs(rot_dist) + rot_eps) * rot_reward_scale

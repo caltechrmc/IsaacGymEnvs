@@ -8,7 +8,7 @@ env:
   numEnvs: ${resolve_default:16384,${...num_envs}}
   envSpacing: 0.75
   episodeLength: 320 # Not used, but would be 8 sec if resetTime is not set
-  resetTime: 8 # Max time till reset, in seconds, if a goal wasn't achieved. Will overwrite the episodeLength if is > 0.
+  resetTime: 30 # 8 # Max time till reset, in seconds, if a goal wasn't achieved. Will overwrite the episodeLength if is > 0.
   enableDebugVis: False
   aggregateMode: 1
 
@@ -26,13 +26,13 @@ env:
   useRelativeControl: False
   dofSpeedScale: 20.0
 
-  use_capped_dof_control: False 
+  use_capped_dof_control: False
   max_dof_radians_per_second: 6.2832
 
   num_success_hold_steps: 0
 
   actionsMovingAverage: 
-    range: [0.15, 0.2]
+    range: [0.15, 0.2] # set to 0.1 for real world deployment
     schedule_steps: 1000_000
     #schedule_steps: 300_000
     schedule_freq: 500 # schedule every 500 steps for stability
@@ -59,9 +59,9 @@ env:
   resetDofPosRandomInterval: 0.2
   resetDofVelRandomInterval: 0.0
 
-  startObjectPoseDX: 0.04
-  startObjectPoseDY: 0.0
-  startObjectPoseDZ: 0.57
+  startObjectPoseDX: 0.08047897528 # 0.04
+  startObjectPoseDY: 0.07139888381 # 0.14279776763 # 0.0
+  startObjectPoseDZ: 0.55449798937 # 0.57
 
   # Random forces applied to the object
   forceScale: 2.0
@@ -79,13 +79,15 @@ env:
     enable: True 
     prob: 0.3
 
+  useGoalFacets: True
+  
   # reward -> dictionary
-  distRewardScale: -10.0
-  rotRewardScale: 1.0
+  distRewardScale: -10.0 # 0
+  rotRewardScale: 1.0 # 3.0
   rotEps: 0.1
   actionPenaltyScale: -0.001
   actionDeltaPenaltyScale: -0.2 #-0.01
-  reachGoalBonus: 250
+  reachGoalBonus: 250 # 937.5
   fallDistance: 0.24
   fallPenalty: 0.0
 
@@ -93,11 +95,12 @@ env:
   observationType: "no_vel" #"full_state" # can be "no_vel", "full_state"
   asymmetric_observations: True
   successTolerance: 0.1
-  printNumSuccesses: False
-  maxConsecutiveSuccesses: 50
-
+  printNumSuccesses: True
+  maxConsecutiveSuccesses: 1000 # 50
+  hand: "left"
+  
   asset:
-    assetFileName: "urdf/leap_hand/leap_hand_right.urdf"
+    assetFileName: "urdf/leap_hand/leap_hand_left.urdf"
     assetFileNameBlock: "urdf/objects/cube_multicolor_allegro.urdf"
     assetFileNameEgg: "mjcf/open_ai_assets/hand/egg.xml"
     assetFileNamePen: "mjcf/open_ai_assets/hand/pen.xml"
@@ -112,7 +115,7 @@ task:
 
     sim_params:
       gravity:
-        range: [0, 0.6]
+        range: [0, 0.5] # [0, 0.6]
         operation: "additive"
         distribution: "gaussian"
 
@@ -128,35 +131,35 @@ task:
         color: True
         dof_properties:
           damping: 
-            range: [0.01, 20.0]
+            range: [0.75, 1.5] # [0.01, 20.0]
             operation: "scaling"
             distribution: "loguniform"
           stiffness:
-            range: [0.01, 20.0]
+            range: [0.3, 3.0] # [0.01, 20.0]
             operation: "scaling"
             distribution: "loguniform"
             # schedule: "linear"  # "linear" will scale the current random sample by `min(current num steps, schedule_steps) / schedule_steps`
             # schedule_steps: 30000
           effort:
-            range: [0.4, 10.0]
+            range: [0.9, 1.1] # [0.4, 10.0]
             operation: "scaling"
             distribution: "uniform"
           friction:
-            range: [0.0, 10.0]
+            range: [0.8, 1.2] # [0.0, 10.0]
             operation: "scaling"
             distribution: "uniform"
           armature:
-            range: [0.0, 10.0]
+            range: [0.8, 1.2] # [0.0, 10.0]
             operation: "scaling"
             distribution: "uniform"
-          lower:
+          lower: # TODO
             # range: [0, 0.01]
             # operation: "additive"
             # distribution: "gaussian"
             range: [-5.0, 5.0]
             operation: "additive"
             distribution: "uniform"
-          upper:
+          upper: # TODO
             # range: [0, 0.01]
             # operation: "additive"
             # distribution: "gaussian"
@@ -170,7 +173,7 @@ task:
           mass:
             # range: [0.5, 2.0]
             # range: [0.5, 1.5]
-            range: [0.4, 1.6] # change when runtime API is available
+            range: [0.4, 1.5] # [0.4, 1.6] # change when runtime API is available
             operation: "scaling"
             distribution: "uniform"
             setup_only: False # Property will only be randomized once before simulation is started. See Domain Randomization Documentation for more info.
@@ -181,14 +184,14 @@ task:
           friction:
             num_buckets: 250
             # range: [0.2, 1.2] #[0.7, 1.3]
-            range: [0.01, 2.0]
+            range: [0.8, 1.2] # [0.01, 2.0]
             operation: "scaling"
             distribution: "uniform"
             # schedule: "linear"  # "linear" will scale the current random sample by `min(current num steps, schedule_steps) / schedule_steps`
             # schedule_steps: 30000
           restitution:
             num_buckets: 100
-            range: [0.0, 0.5]
+            range: [0.0, 0.4] # [0.0, 0.5]
             operation: "additive"
             distribution: "uniform"
 
@@ -204,7 +207,7 @@ task:
         rigid_body_properties:
           mass:
             # range: [0.5, 1.5]
-            range: [0.3, 1.7] # after fixing the API expand it even more
+            range: [0.4, 1.6] # [0.3, 1.7] # after fixing the API expand it even more
             operation: "scaling"
             distribution: "uniform"
             setup_only: False # Property will only be randomized once before simulation is started. See Domain Randomization Documentation for more info.
@@ -218,7 +221,7 @@ task:
             # operation: "scaling"
             # distribution: "uniform"
             num_buckets: 250
-            range: [0.01, 2.0]
+            range: [0.3, 0.9] # [0.01, 2.0]
             operation: "scaling"
             distribution: "uniform"
             # distribution: "loguniform"
@@ -226,7 +229,7 @@ task:
             # schedule_steps: 30000
           restitution:
             num_buckets: 100
-            range: [0.0, 0.5]
+            range: [0.0, 0.4] # [0.0, 0.5]
             operation: "additive"
             distribution: "uniform"
 
@@ -250,14 +253,14 @@ task:
 
     adr_rollout_perf_alpha: 0.99
 
-    adr_load_from_checkpoint: false
+    adr_load_from_checkpoint: False
 
     # raw ADR params. more are added by affine transforms code
     params:
       ### Hand Properties
       hand_damping:
         range_path: actor_params.hand.dof_properties.damping.range
-        init_range: [0.5, 2.0]
+        init_range: [0.75, 1.5] # [0.5, 2.0]
         limits: [0.01, 20.0]
         delta: 0.01
         delta_style: 'additive'
@@ -265,7 +268,7 @@ task:
       # todo: double-check values. Do they multiply?
       hand_stiffness:
         range_path: actor_params.hand.dof_properties.stiffness.range
-        init_range: [0.8, 1.2]
+        init_range: [0.3, 3.0] # [0.8, 1.2]
         limits: [0.01, 20.0]
         delta: 0.01
         delta_style: 'additive'
@@ -287,52 +290,53 @@ task:
         limits: [0.4, 10.0]
         delta: 0.01
         delta_style: 'additive'
-      hand_lower:
+      hand_lower: # TODO
         range_path: actor_params.hand.dof_properties.lower.range
         init_range: [0.0, 0.0]
         limits: [-5.0, 5.0]
         delta: 0.02
         delta_style: 'additive' 
-      hand_upper:
+      hand_upper: # TODO
         range_path: actor_params.hand.dof_properties.upper.range
         init_range: [0.0, 0.0]
         limits: [-5.0, 5.0]
         delta: 0.02
         delta_style: 'additive'
+
       # todo randomize fingertips and hand parameters independently
       hand_mass:
         range_path: actor_params.hand.rigid_body_properties.mass.range
-        init_range: [0.8, 1.2]
+        init_range: [0.4, 1.5] # [0.8, 1.2]
         limits: [0.01, 10.0]
         delta: 0.01
         delta_style: 'additive'
       hand_friction_fingertips:
         range_path: actor_params.hand.rigid_shape_properties.friction.range #.fingertips
-        init_range: [0.9, 1.1]
+        init_range: [0.8, 1.2] # [0.9, 1.1]
         limits: [0.1, 2.0]
         delta: 0.01
         delta_style: 'additive'
       hand_restitution:
         range_path: actor_params.hand.rigid_shape_properties.restitution.range
-        init_range: [0.0, 0.1]
+        init_range: [0.0, 0.4] # [0.0, 0.1]
         limits: [0.0, 1.0]
         delta: 0.01
         delta_style: 'additive'
       object_mass:
         range_path: actor_params.object.rigid_body_properties.mass.range
-        init_range: [0.8, 1.2]
+        init_range: [0.4, 1.6] # [0.8, 1.2]
         limits: [0.01, 10.0]
         delta: 0.01
         delta_style: 'additive'
       object_friction:
         range_path: actor_params.object.rigid_shape_properties.friction.range
-        init_range: [0.4, 0.8]
+        init_range: [0.3, 0.9] # [0.4, 0.8]
         limits: [0.01, 2.0]
         delta: 0.01
         delta_style: 'additive'
       object_restitution:
         range_path: actor_params.object.rigid_shape_properties.restitution.range
-        init_range: [0.0, 0.1]
+        init_range: [0.0, 0.4] # [0.0, 0.1]
         limits: [0.0, 1.0]
         delta: 0.01
         delta_style: 'additive'
@@ -432,7 +436,7 @@ sim:
   substeps: 2
   up_axis: "z"
   use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
-  gravity: [0.0, 0.0, -9.81]
+  gravity: [0.0, 0.0, -9.80665]
   physx:
     num_threads: ${....num_threads}
     solver_type: ${....solver_type}
